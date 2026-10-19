@@ -1,0 +1,47 @@
+name: Update SwiftCull
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_message:
+        description: 'Confirm the full commit message: chore: update SwiftCull to vX.Y.Z'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-swiftcull
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Verify release and update Cask
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/update-cask.py
+      - name: Commit changed Cask
+        env:
+          CONFIRMED_MESSAGE: ${{ inputs.commit_message }}
+        run: |
+          if git diff --quiet -- Casks/swiftcull.rb; then
+            exit 0
+          fi
+          version=$(sed -n 's/^  version "\([^"]*\)"/\1/p' Casks/swiftcull.rb)
+          expected="chore: update SwiftCull to v${version}"
+          if [[ "$CONFIRMED_MESSAGE" != "$expected" ]]; then
+            echo "The confirmed commit message must exactly match: $expected"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/swiftcull.rb
+          git commit -m "$CONFIRMED_MESSAGE"
+          git push
